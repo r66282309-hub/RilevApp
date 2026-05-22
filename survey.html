@@ -268,8 +268,9 @@
     els.validateBtn.addEventListener("click", validateCode);
     els.changeCodeBtn.addEventListener("click", changeCode);
     els.gpsBtn.addEventListener("click", requestGps);
-    els.cameraBtn.addEventListener("click", async () => {
-      if (!currentPosition) await requestGpsPromiseSafe();
+    els.cameraBtn.addEventListener("click", () => {
+      // Il file picker deve aprirsi subito dentro il click dell'utente.
+      // Se prima aspettiamo il GPS con await, alcuni browser bloccano camera/selettore.
       els.photoInput.click();
     });
     els.photoInput.addEventListener("change", handlePhoto);
@@ -367,12 +368,13 @@
       const file = event.target.files[0];
       if (!file) return;
 
-      if (!currentPosition) {
-        const pos = await requestGpsPromiseSafe();
-        if (!pos) return setStatus(els.photoStatus, "Serve il GPS prima della foto.", "err");
-      }
-
       try {
+        setStatus(els.photoStatus, "Acquisizione GPS per la foto...");
+        const pos = await requestGpsPromiseSafe();
+        if (!pos && !currentPosition) {
+          return setStatus(els.photoStatus, "Serve il GPS prima di preparare la foto.", "err");
+        }
+
         setStatus(els.photoStatus, "Preparazione foto...");
         const resizedDataUrl = await resizeImageToJpeg(file, 1600, 1200, 0.60);
         const exifDataUrl = addGpsExif(resizedDataUrl, currentPosition.lat, currentPosition.lon);
@@ -456,7 +458,7 @@
 
       const finalDataUrl = addGpsExif(processedPhoto.dataUrl, currentPosition.lat, currentPosition.lon);
       const item = {
-        local_id: crypto.randomUUID(),
+        local_id: makeLocalId(),
         code,
         lat: currentPosition.lat,
         lon: currentPosition.lon,
@@ -486,6 +488,10 @@
     }
 
     async function uploadItem(item) {
+      if (!supabaseClient) throw new Error("Supabase non inizializzato");
+
+      setStatus(els.saveStatus, "Creazione record su Supabase...");
+
       const { data: inserted, error: insertError } = await supabaseClient
         .from(TABLE_POINTS)
         .insert({
@@ -499,18 +505,33 @@
         })
         .select("id")
         .single();
+
       if (insertError) throw insertError;
+      if (!inserted || !inserted.id) throw new Error("Record creato ma ID non restituito");
 
       const id = inserted.id;
       const filename = `${id}.jpg`;
       const blob = dataUrlToBlob(item.photo_data_url);
 
+      setStatus(els.saveStatus, `Caricamento foto ${filename}...`);
+
       const { error: uploadError } = await supabaseClient.storage
         .from(STORAGE_BUCKET)
-        .upload(filename, blob, { contentType: "image/jpeg", upsert: false });
-      if (uploadError) throw uploadError;
+        .upload(filename, blob, { contentType: "image/jpeg", upsert: true });
 
-      const { data: publicData } = supabaseClient.storage.from(STORAGE_BUCKET).getPublicUrl(filename);
+      if (uploadError) {
+        await supabaseClient
+          .from(TABLE_POINTS)
+          .update({ sync_status: "photo_upload_error" })
+          .eq("id", id);
+        throw uploadError;
+      }
+
+      const { data: publicData } = supabaseClient.storage
+        .from(STORAGE_BUCKET)
+        .getPublicUrl(filename);
+
+      setStatus(els.saveStatus, "Aggiornamento record finale...");
 
       const { error: updateError } = await supabaseClient
         .from(TABLE_POINTS)
@@ -521,7 +542,13 @@
           sync_status: "synced"
         })
         .eq("id", id);
+
       if (updateError) throw updateError;
+    }
+
+    function makeLocalId() {
+      if (window.crypto && typeof crypto.randomUUID === "function") return crypto.randomUUID();
+      return "local_" + Date.now() + "_" + Math.random().toString(36).slice(2);
     }
 
     function getQueue() {
