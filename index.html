@@ -1,0 +1,652 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>RilevApp - Survey</title>
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="https://cdn.jsdelivr.net/npm/piexifjs"></script>
+
+  <style>
+    :root {
+      --primary: #1f6f43;
+      --primary-dark: #165332;
+      --bg: #f4f7f5;
+      --card: #ffffff;
+      --text: #1d1d1f;
+      --muted: #667085;
+      --danger: #b42318;
+      --ok: #027a48;
+      --border: #d0d5dd;
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background: var(--bg);
+      color: var(--text);
+    }
+
+    header {
+      background: var(--primary);
+      color: white;
+      padding: 18px 16px;
+      text-align: center;
+    }
+
+    header h1 {
+      margin: 0;
+      font-size: 1.5rem;
+    }
+
+    header p {
+      margin: 4px 0 0;
+      font-size: 0.9rem;
+      opacity: 0.9;
+    }
+
+    main {
+      max-width: 720px;
+      margin: 0 auto;
+      padding: 16px;
+    }
+
+    .card {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 16px;
+      margin-bottom: 16px;
+      box-shadow: 0 4px 14px rgba(16, 24, 40, 0.06);
+    }
+
+    label {
+      display: block;
+      font-weight: 650;
+      margin-bottom: 6px;
+    }
+
+    input[type="text"], input[type="file"] {
+      width: 100%;
+      padding: 12px;
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      font-size: 1rem;
+      background: white;
+    }
+
+    input[readonly] {
+      background: #f9fafb;
+    }
+
+    button {
+      width: 100%;
+      border: none;
+      border-radius: 12px;
+      padding: 13px 16px;
+      font-size: 1rem;
+      font-weight: 700;
+      color: white;
+      background: var(--primary);
+      cursor: pointer;
+      margin-top: 10px;
+    }
+
+    button.secondary {
+      background: #344054;
+    }
+
+    button.danger {
+      background: var(--danger);
+    }
+
+    button:disabled {
+      background: #98a2b3;
+      cursor: not-allowed;
+    }
+
+    .row {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+    }
+
+    .status {
+      padding: 10px 12px;
+      border-radius: 12px;
+      font-size: 0.95rem;
+      margin-top: 10px;
+      background: #f2f4f7;
+      color: #344054;
+    }
+
+    .status.ok {
+      background: #ecfdf3;
+      color: var(--ok);
+    }
+
+    .status.err {
+      background: #fef3f2;
+      color: var(--danger);
+    }
+
+    .muted {
+      color: var(--muted);
+      font-size: 0.9rem;
+    }
+
+    img.preview {
+      width: 100%;
+      max-height: 340px;
+      object-fit: contain;
+      border-radius: 12px;
+      border: 1px solid var(--border);
+      margin-top: 12px;
+      background: #f9fafb;
+    }
+
+    .small-list {
+      padding-left: 18px;
+      color: var(--muted);
+      font-size: 0.9rem;
+    }
+
+    @media (max-width: 560px) {
+      .row { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>RilevApp</h1>
+    <p>Survey GPS e foto</p>
+  </header>
+
+  <main>
+    <section class="card">
+      <label for="codeInput">Codice identificativo</label>
+      <input id="codeInput" type="text" autocomplete="off" placeholder="Inserisci codice" />
+      <button id="validateBtn">Valida codice</button>
+      <button id="changeCodeBtn" class="secondary" style="display:none;">Cambia codice</button>
+      <div id="codeStatus" class="status">Inserisci il codice assegnato.</div>
+    </section>
+
+    <section class="card">
+      <label>Coordinate GPS</label>
+      <div class="row">
+        <input id="latInput" type="text" readonly placeholder="Latitudine" />
+        <input id="lonInput" type="text" readonly placeholder="Longitudine" />
+      </div>
+      <input id="accuracyInput" type="text" readonly placeholder="Accuratezza" style="margin-top:10px;" />
+      <button id="gpsBtn" class="secondary">Aggiorna GPS</button>
+      <div id="gpsStatus" class="status">GPS non ancora acquisito.</div>
+    </section>
+
+    <section class="card">
+      <label for="photoInput">Foto</label>
+      <input id="photoInput" type="file" accept="image/*" capture="environment" />
+      <img id="preview" class="preview" alt="Anteprima foto" style="display:none;" />
+      <div id="photoStatus" class="status">Nessuna foto selezionata.</div>
+    </section>
+
+    <section class="card">
+      <button id="saveBtn">Salva / invia rilievo</button>
+      <button id="syncBtn" class="secondary">Sincronizza coda locale</button>
+      <div id="saveStatus" class="status">Pronto.</div>
+      <p class="muted">Se non c'è rete, il rilievo viene salvato localmente e inviato alla successiva sincronizzazione.</p>
+    </section>
+
+    <section class="card">
+      <strong>Coda locale</strong>
+      <div id="queueStatus" class="status">0 rilievi in coda.</div>
+      <button id="clearQueueBtn" class="danger">Svuota coda locale</button>
+      <ul class="small-list">
+        <li>Il nome definitivo della foto viene assegnato da Supabase al momento dell'invio.</li>
+        <li>La foto viene ridimensionata e salvata in JPG qualità 60%.</li>
+        <li>Le coordinate GPS vengono scritte anche negli EXIF della foto.</li>
+      </ul>
+    </section>
+  </main>
+
+  <script>
+    // =============================
+    // CONFIGURAZIONE SUPABASE
+    // =============================
+    const SUPABASE_URL = "https://uvkboeiognxsmkufmzgs.supabase.co";
+    const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InV2a2JvZWlvZ254c21rdWZtemdzIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzk0NDY0MjMsImV4cCI6MjA5NTAyMjQyM30.XRefx4ztMwKU4O8Q6BS-KHZLuNGrBR-En35f1vLgEW8";
+
+    const TABLE_CODES = "valid_codes";
+    const TABLE_POINTS = "survey_points";
+    const STORAGE_BUCKET = "survey-photos";
+
+    const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+    // =============================
+    // STATO APP
+    // =============================
+    let validatedCode = localStorage.getItem("rilevapp_validated_code") || "";
+    let currentPosition = null;
+    let processedPhoto = null; // { dataUrl, blob }
+
+    const els = {
+      codeInput: document.getElementById("codeInput"),
+      validateBtn: document.getElementById("validateBtn"),
+      changeCodeBtn: document.getElementById("changeCodeBtn"),
+      codeStatus: document.getElementById("codeStatus"),
+      latInput: document.getElementById("latInput"),
+      lonInput: document.getElementById("lonInput"),
+      accuracyInput: document.getElementById("accuracyInput"),
+      gpsBtn: document.getElementById("gpsBtn"),
+      gpsStatus: document.getElementById("gpsStatus"),
+      photoInput: document.getElementById("photoInput"),
+      preview: document.getElementById("preview"),
+      photoStatus: document.getElementById("photoStatus"),
+      saveBtn: document.getElementById("saveBtn"),
+      syncBtn: document.getElementById("syncBtn"),
+      saveStatus: document.getElementById("saveStatus"),
+      queueStatus: document.getElementById("queueStatus"),
+      clearQueueBtn: document.getElementById("clearQueueBtn")
+    };
+
+    // =============================
+    // INIT
+    // =============================
+    document.addEventListener("DOMContentLoaded", async () => {
+      if (validatedCode) {
+        els.codeInput.value = validatedCode;
+        setStatus(els.codeStatus, `Codice già validato: ${validatedCode}`, "ok");
+        els.changeCodeBtn.style.display = "block";
+      }
+      updateQueueStatus();
+      acquireGps();
+    });
+
+    els.validateBtn.addEventListener("click", validateCode);
+    els.changeCodeBtn.addEventListener("click", changeCode);
+    els.gpsBtn.addEventListener("click", acquireGps);
+    els.photoInput.addEventListener("change", handlePhoto);
+    els.saveBtn.addEventListener("click", saveSurvey);
+    els.syncBtn.addEventListener("click", syncQueue);
+    els.clearQueueBtn.addEventListener("click", clearQueue);
+    window.addEventListener("online", syncQueue);
+
+    // =============================
+    // CODICE
+    // =============================
+    async function validateCode() {
+      const code = els.codeInput.value.trim();
+      if (!code) return setStatus(els.codeStatus, "Inserisci un codice.", "err");
+
+      if (!navigator.onLine) {
+        if (code === validatedCode) {
+          return setStatus(els.codeStatus, "Codice autorizzato localmente.", "ok");
+        }
+        return setStatus(els.codeStatus, "Serve connessione per validare un nuovo codice.", "err");
+      }
+
+      try {
+        const { data, error } = await supabase
+          .from(TABLE_CODES)
+          .select("code, active")
+          .eq("code", code)
+          .eq("active", true)
+          .single();
+
+        if (error || !data) throw error;
+
+        validatedCode = code;
+        localStorage.setItem("rilevapp_validated_code", code);
+        els.changeCodeBtn.style.display = "block";
+        setStatus(els.codeStatus, `Codice validato: ${code}`, "ok");
+      } catch (err) {
+        setStatus(els.codeStatus, "Codice non valido o non attivo.", "err");
+      }
+    }
+
+    function changeCode() {
+      if (!confirm("Vuoi rimuovere il codice salvato localmente?")) return;
+      validatedCode = "";
+      localStorage.removeItem("rilevapp_validated_code");
+      els.codeInput.value = "";
+      els.changeCodeBtn.style.display = "none";
+      setStatus(els.codeStatus, "Inserisci un nuovo codice.");
+    }
+
+    // =============================
+    // GPS
+    // =============================
+    function acquireGps() {
+      if (!navigator.geolocation) {
+        return setStatus(els.gpsStatus, "Geolocalizzazione non supportata.", "err");
+      }
+
+      setStatus(els.gpsStatus, "Acquisizione GPS in corso...");
+
+      navigator.geolocation.getCurrentPosition(
+        pos => {
+          currentPosition = {
+            lat: pos.coords.latitude,
+            lon: pos.coords.longitude,
+            accuracy: pos.coords.accuracy,
+            timestamp: new Date().toISOString()
+          };
+          els.latInput.value = currentPosition.lat.toFixed(7);
+          els.lonInput.value = currentPosition.lon.toFixed(7);
+          els.accuracyInput.value = `Accuratezza: ${Math.round(currentPosition.accuracy)} m`;
+          setStatus(els.gpsStatus, "GPS acquisito.", "ok");
+        },
+        err => {
+          setStatus(els.gpsStatus, `Errore GPS: ${err.message}`, "err");
+        },
+        {
+          enableHighAccuracy: true,
+          timeout: 20000,
+          maximumAge: 0
+        }
+      );
+    }
+
+    function acquireGpsPromise() {
+      return new Promise((resolve, reject) => {
+        navigator.geolocation.getCurrentPosition(
+          pos => {
+            currentPosition = {
+              lat: pos.coords.latitude,
+              lon: pos.coords.longitude,
+              accuracy: pos.coords.accuracy,
+              timestamp: new Date().toISOString()
+            };
+            els.latInput.value = currentPosition.lat.toFixed(7);
+            els.lonInput.value = currentPosition.lon.toFixed(7);
+            els.accuracyInput.value = `Accuratezza: ${Math.round(currentPosition.accuracy)} m`;
+            resolve(currentPosition);
+          },
+          reject,
+          { enableHighAccuracy: true, timeout: 20000, maximumAge: 0 }
+        );
+      });
+    }
+
+    // =============================
+    // FOTO: JPG, RESIZE, EXIF GPS
+    // =============================
+    async function handlePhoto(event) {
+      const file = event.target.files[0];
+      if (!file) return;
+
+      if (!currentPosition) {
+        setStatus(els.photoStatus, "Prima acquisisci il GPS.", "err");
+        return;
+      }
+
+      try {
+        setStatus(els.photoStatus, "Elaborazione foto...");
+        const resizedDataUrl = await resizeImageToJpeg(file, 1600, 1200, 0.60);
+        const exifDataUrl = addGpsExif(resizedDataUrl, currentPosition.lat, currentPosition.lon);
+        const blob = dataUrlToBlob(exifDataUrl);
+
+        processedPhoto = { dataUrl: exifDataUrl, blob };
+        els.preview.src = exifDataUrl;
+        els.preview.style.display = "block";
+        setStatus(els.photoStatus, "Foto pronta: JPG ridimensionato con EXIF GPS.", "ok");
+      } catch (err) {
+        console.error(err);
+        setStatus(els.photoStatus, "Errore durante elaborazione foto.", "err");
+      }
+    }
+
+    function resizeImageToJpeg(file, maxLandscapeW, maxLandscapeH, quality) {
+      return new Promise((resolve, reject) => {
+        const img = new Image();
+        const reader = new FileReader();
+
+        reader.onload = e => {
+          img.onload = () => {
+            let maxW = maxLandscapeW;
+            let maxH = maxLandscapeH;
+
+            if (img.height > img.width) {
+              maxW = maxLandscapeH;
+              maxH = maxLandscapeW;
+            }
+
+            let { width, height } = img;
+            const ratio = Math.min(maxW / width, maxH / height, 1);
+            width = Math.round(width * ratio);
+            height = Math.round(height * ratio);
+
+            const canvas = document.createElement("canvas");
+            canvas.width = width;
+            canvas.height = height;
+            const ctx = canvas.getContext("2d");
+            ctx.drawImage(img, 0, 0, width, height);
+
+            resolve(canvas.toDataURL("image/jpeg", quality));
+          };
+          img.onerror = reject;
+          img.src = e.target.result;
+        };
+
+        reader.onerror = reject;
+        reader.readAsDataURL(file);
+      });
+    }
+
+    function addGpsExif(jpegDataUrl, lat, lon) {
+      const zeroth = {};
+      const exif = {};
+      const gps = {};
+
+      gps[piexif.GPSIFD.GPSLatitudeRef] = lat >= 0 ? "N" : "S";
+      gps[piexif.GPSIFD.GPSLatitude] = degToDmsRational(Math.abs(lat));
+      gps[piexif.GPSIFD.GPSLongitudeRef] = lon >= 0 ? "E" : "W";
+      gps[piexif.GPSIFD.GPSLongitude] = degToDmsRational(Math.abs(lon));
+      gps[piexif.GPSIFD.GPSMapDatum] = "WGS-84";
+
+      const exifObj = { "0th": zeroth, Exif: exif, GPS: gps };
+      const exifBytes = piexif.dump(exifObj);
+      return piexif.insert(exifBytes, jpegDataUrl);
+    }
+
+    function degToDmsRational(degFloat) {
+      const deg = Math.floor(degFloat);
+      const minFloat = (degFloat - deg) * 60;
+      const min = Math.floor(minFloat);
+      const secFloat = (minFloat - min) * 60;
+      const sec = Math.round(secFloat * 100);
+      return [[deg, 1], [min, 1], [sec, 100]];
+    }
+
+    function dataUrlToBlob(dataUrl) {
+      const parts = dataUrl.split(",");
+      const mime = parts[0].match(/:(.*?);/)[1];
+      const binary = atob(parts[1]);
+      const len = binary.length;
+      const bytes = new Uint8Array(len);
+      for (let i = 0; i < len; i++) bytes[i] = binary.charCodeAt(i);
+      return new Blob([bytes], { type: mime });
+    }
+
+    // =============================
+    // SALVATAGGIO / CODA
+    // =============================
+    async function saveSurvey() {
+      const code = els.codeInput.value.trim();
+
+      if (!validatedCode || code !== validatedCode) {
+        return setStatus(els.saveStatus, "Codice non validato.", "err");
+      }
+
+      if (!processedPhoto) {
+        return setStatus(els.saveStatus, "Manca la foto.", "err");
+      }
+
+      try {
+        setStatus(els.saveStatus, "Aggiornamento GPS finale...");
+        await acquireGpsPromise();
+      } catch (_) {
+        if (!currentPosition) return setStatus(els.saveStatus, "GPS non disponibile.", "err");
+      }
+
+      // Re-inserisce EXIF con la posizione aggiornata finale
+      const finalDataUrl = addGpsExif(processedPhoto.dataUrl, currentPosition.lat, currentPosition.lon);
+      const finalBlob = dataUrlToBlob(finalDataUrl);
+
+      const item = {
+        local_id: crypto.randomUUID(),
+        code,
+        lat: currentPosition.lat,
+        lon: currentPosition.lon,
+        accuracy: currentPosition.accuracy,
+        gps_timestamp: currentPosition.timestamp,
+        created_local_at: new Date().toISOString(),
+        photo_data_url: finalDataUrl
+      };
+
+      if (!navigator.onLine) {
+        enqueue(item);
+        setStatus(els.saveStatus, "Rete assente: rilievo salvato in coda locale.", "ok");
+        resetFormAfterSave();
+        return;
+      }
+
+      try {
+        await uploadItem(item);
+        setStatus(els.saveStatus, "Rilievo inviato correttamente.", "ok");
+        resetFormAfterSave();
+      } catch (err) {
+        console.error(err);
+        enqueue(item);
+        setStatus(els.saveStatus, "Invio non riuscito: rilievo salvato in coda locale.", "err");
+        resetFormAfterSave();
+      }
+    }
+
+    async function uploadItem(item) {
+      // 1. crea record provvisorio, Supabase assegna id progressivo
+      const { data: inserted, error: insertError } = await supabase
+        .from(TABLE_POINTS)
+        .insert({
+          code: item.code,
+          lat: item.lat,
+          lon: item.lon,
+          accuracy: item.accuracy,
+          gps_timestamp: item.gps_timestamp,
+          created_local_at: item.created_local_at,
+          sync_status: "uploading"
+        })
+        .select("id")
+        .single();
+
+      if (insertError) throw insertError;
+
+      const id = inserted.id;
+      const filename = `${id}.jpg`;
+      const blob = dataUrlToBlob(item.photo_data_url);
+
+      // 2. carica foto con nome progressivo
+      const { error: uploadError } = await supabase.storage
+        .from(STORAGE_BUCKET)
+        .upload(filename, blob, {
+          contentType: "image/jpeg",
+          upsert: false
+        });
+
+      if (uploadError) throw uploadError;
+
+      // 3. recupera URL pubblico o path
+      const { data: publicData } = supabase.storage
+        .from(STORAGE_BUCKET)
+        .getPublicUrl(filename);
+
+      // 4. aggiorna record con nome foto e URL
+      const { error: updateError } = await supabase
+        .from(TABLE_POINTS)
+        .update({
+          filename,
+          photo_path: filename,
+          photo_url: publicData.publicUrl,
+          sync_status: "synced"
+        })
+        .eq("id", id);
+
+      if (updateError) throw updateError;
+    }
+
+    function getQueue() {
+      return JSON.parse(localStorage.getItem("rilevapp_queue") || "[]");
+    }
+
+    function setQueue(queue) {
+      localStorage.setItem("rilevapp_queue", JSON.stringify(queue));
+      updateQueueStatus();
+    }
+
+    function enqueue(item) {
+      const queue = getQueue();
+      queue.push(item);
+      setQueue(queue);
+    }
+
+    async function syncQueue() {
+      if (!navigator.onLine) {
+        return setStatus(els.saveStatus, "Connessione assente: sincronizzazione non possibile.", "err");
+      }
+
+      let queue = getQueue();
+      if (queue.length === 0) {
+        updateQueueStatus();
+        return setStatus(els.saveStatus, "Nessun rilievo in coda.", "ok");
+      }
+
+      setStatus(els.saveStatus, `Sincronizzazione di ${queue.length} rilievi...`);
+
+      const remaining = [];
+      for (const item of queue) {
+        try {
+          await uploadItem(item);
+        } catch (err) {
+          console.error("Errore sync item", item.local_id, err);
+          remaining.push(item);
+        }
+      }
+
+      setQueue(remaining);
+
+      if (remaining.length === 0) {
+        setStatus(els.saveStatus, "Coda sincronizzata correttamente.", "ok");
+      } else {
+        setStatus(els.saveStatus, `${remaining.length} rilievi non sincronizzati.`, "err");
+      }
+    }
+
+    function clearQueue() {
+      if (!confirm("Vuoi davvero svuotare la coda locale? I rilievi non inviati andranno persi.")) return;
+      setQueue([]);
+      setStatus(els.saveStatus, "Coda locale svuotata.");
+    }
+
+    function updateQueueStatus() {
+      const n = getQueue().length;
+      els.queueStatus.textContent = `${n} riliev${n === 1 ? "o" : "i"} in coda.`;
+      els.queueStatus.className = n > 0 ? "status" : "status ok";
+    }
+
+    function resetFormAfterSave() {
+      processedPhoto = null;
+      els.photoInput.value = "";
+      els.preview.style.display = "none";
+      els.preview.src = "";
+      setStatus(els.photoStatus, "Nessuna foto selezionata.");
+    }
+
+    function setStatus(el, text, type = "") {
+      el.textContent = text;
+      el.className = `status ${type}`.trim();
+    }
+  </script>
+</body>
+</html>
