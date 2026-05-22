@@ -73,4 +73,3 @@ Tabelle principali:
 * La geolocalizzazione richiede HTTPS e permesso dell’utente.
 * In caso di modifiche al codice, può essere necessario svuotare cache/PWA.
 * Su iPhone/Safari può essere necessario cancellare i dati del sito se viene caricata una vecchia versione.
-* Non inserire mai service role key o credenziali amministrative nel frontend.
