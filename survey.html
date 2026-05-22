@@ -486,42 +486,44 @@
     }
 
     async function uploadItem(item) {
-      const { data: inserted, error: insertError } = await supabaseClient
-        .from(TABLE_POINTS)
-        .insert({
-          code: item.code,
-          lat: item.lat,
-          lon: item.lon,
-          accuracy: item.accuracy,
-          gps_timestamp: item.gps_timestamp,
-          created_local_at: item.created_local_at,
-          sync_status: "uploading"
-        })
-        .select("id")
-        .single();
-      if (insertError) throw insertError;
+      if (!supabaseClient) throw new Error("Supabase non inizializzato");
 
-      const id = inserted.id;
+      const { data: createdId, error: createError } = await supabaseClient
+        .rpc("create_survey_point", {
+          p_code: item.code,
+          p_lat: item.lat,
+          p_lon: item.lon,
+          p_accuracy: item.accuracy,
+          p_gps_timestamp: item.gps_timestamp,
+          p_created_local_at: item.created_local_at
+        });
+
+      if (createError) throw createError;
+      if (!createdId) throw new Error("ID progressivo non restituito da Supabase");
+
+      const id = createdId;
       const filename = `${id}.jpg`;
       const blob = dataUrlToBlob(item.photo_data_url);
 
       const { error: uploadError } = await supabaseClient.storage
         .from(STORAGE_BUCKET)
         .upload(filename, blob, { contentType: "image/jpeg", upsert: false });
+
       if (uploadError) throw uploadError;
 
-      const { data: publicData } = supabaseClient.storage.from(STORAGE_BUCKET).getPublicUrl(filename);
+      const { data: publicData } = supabaseClient.storage
+        .from(STORAGE_BUCKET)
+        .getPublicUrl(filename);
 
-      const { error: updateError } = await supabaseClient
-        .from(TABLE_POINTS)
-        .update({
-          filename,
-          photo_path: filename,
-          photo_url: publicData.publicUrl,
-          sync_status: "synced"
-        })
-        .eq("id", id);
-      if (updateError) throw updateError;
+      const { error: finalizeError } = await supabaseClient
+        .rpc("finalize_survey_point", {
+          p_id: id,
+          p_filename: filename,
+          p_photo_path: filename,
+          p_photo_url: publicData.publicUrl
+        });
+
+      if (finalizeError) throw finalizeError;
     }
 
     function getQueue() {
