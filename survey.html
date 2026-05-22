@@ -97,6 +97,17 @@
     button.danger { background: var(--danger); }
     button:disabled { background: #98a2b3; cursor: not-allowed; }
 
+    button.busy {
+      background: #f97316 !important;
+      transform: scale(0.99);
+      opacity: 0.95;
+    }
+
+    button.flash {
+      background: #f97316 !important;
+      transform: scale(0.99);
+    }
+
     .status {
       padding: 10px 12px;
       border-radius: 13px;
@@ -268,8 +279,9 @@
     els.validateBtn.addEventListener("click", validateCode);
     els.changeCodeBtn.addEventListener("click", changeCode);
     els.gpsBtn.addEventListener("click", requestGps);
-    els.cameraBtn.addEventListener("click", async () => {
-      if (!currentPosition) await requestGpsPromiseSafe();
+    els.cameraBtn.addEventListener("click", () => {
+      // Su iPhone/Safari il selettore foto deve aprirsi subito nel click utente.
+      // Il GPS viene aggiornato dopo la scelta/scatto della foto.
       els.photoInput.click();
     });
     els.photoInput.addEventListener("change", handlePhoto);
@@ -277,6 +289,29 @@
     els.syncBtn.addEventListener("click", syncQueue);
     els.clearQueueBtn.addEventListener("click", clearQueue);
     window.addEventListener("online", syncQueue);
+
+    document.querySelectorAll("button").forEach(button => {
+      button.addEventListener("click", () => flashButton(button));
+    });
+
+    function flashButton(button) {
+      if (button.disabled || button.classList.contains("busy")) return;
+      button.classList.add("flash");
+      setTimeout(() => button.classList.remove("flash"), 850);
+    }
+
+    function setButtonBusy(button, text) {
+      button.dataset.originalText = button.textContent;
+      button.textContent = text;
+      button.disabled = true;
+      button.classList.add("busy");
+    }
+
+    function resetButtonBusy(button, fallbackText) {
+      button.disabled = false;
+      button.classList.remove("busy");
+      button.textContent = button.dataset.originalText || fallbackText;
+    }
 
     async function validateCode() {
       const code = els.codeInput.value.trim();
@@ -367,15 +402,18 @@
       const file = event.target.files[0];
       if (!file) return;
 
-      if (!currentPosition) {
-        const pos = await requestGpsPromiseSafe();
-        if (!pos) return setStatus(els.photoStatus, "Serve il GPS prima della foto.", "err");
-      }
-
       try {
+        setStatus(els.photoStatus, "Acquisizione GPS per la foto...");
+        const pos = await requestGpsPromiseSafe();
+
+        if (!pos && !currentPosition) {
+          return setStatus(els.photoStatus, "Serve il GPS prima di preparare la foto.", "err");
+        }
+
         setStatus(els.photoStatus, "Preparazione foto...");
         const resizedDataUrl = await resizeImageToJpeg(file, 1600, 1200, 0.60);
         const exifDataUrl = addGpsExif(resizedDataUrl, currentPosition.lat, currentPosition.lon);
+
         processedPhoto = { dataUrl: exifDataUrl };
         els.preview.src = exifDataUrl;
         els.preview.style.display = "block";
@@ -448,82 +486,152 @@
 
     async function saveSurvey() {
       const code = els.codeInput.value.trim();
-      if (!validatedCode || code !== validatedCode) return setStatus(els.saveStatus, "Codice non validato.", "err");
-      if (!processedPhoto) return setStatus(els.saveStatus, "Manca la foto.", "err");
 
-      const freshPos = await requestGpsPromiseSafe();
-      if (!freshPos && !currentPosition) return setStatus(els.saveStatus, "GPS non disponibile.", "err");
-
-      const finalDataUrl = addGpsExif(processedPhoto.dataUrl, currentPosition.lat, currentPosition.lon);
-      const item = {
-        local_id: crypto.randomUUID(),
-        code,
-        lat: currentPosition.lat,
-        lon: currentPosition.lon,
-        accuracy: currentPosition.accuracy,
-        gps_timestamp: currentPosition.timestamp,
-        created_local_at: new Date().toISOString(),
-        photo_data_url: finalDataUrl
-      };
-
-      if (!navigator.onLine) {
-        enqueue(item);
-        resetPhoto();
-        return setStatus(els.saveStatus, "Rete assente: rilievo salvato in coda.", "ok");
+      if (!validatedCode || code !== validatedCode) {
+        return setStatus(els.saveStatus, "Codice non validato.", "err");
       }
 
+      if (!processedPhoto) {
+        return setStatus(els.saveStatus, "Manca la foto.", "err");
+      }
+
+      setButtonBusy(els.saveBtn, "Invio in corso...");
+
       try {
+        const freshPos = await requestGpsPromiseSafe();
+        if (!freshPos && !currentPosition) {
+          setStatus(els.saveStatus, "GPS non disponibile.", "err");
+          return;
+        }
+
+        const createdAt = new Date();
+        const safeCode = sanitizeCode(code);
+        const filename = makeFilenameFromDate(createdAt);
+        const photoPath = `${safeCode}/${filename}`;
+
+        const finalDataUrl = addGpsExif(processedPhoto.dataUrl, currentPosition.lat, currentPosition.lon);
+
+        const item = {
+          local_id: makeLocalId(),
+          code,
+          lat: currentPosition.lat,
+          lon: currentPosition.lon,
+          accuracy: currentPosition.accuracy,
+          gps_timestamp: currentPosition.timestamp,
+          created_local_at: createdAt.toISOString(),
+          filename,
+          photo_path: photoPath,
+          photo_data_url: finalDataUrl
+        };
+
+        if (!navigator.onLine) {
+          enqueue(item);
+          resetPhoto();
+          setStatus(els.saveStatus, "Rete assente: rilievo salvato in coda.", "ok");
+          return;
+        }
+
         setStatus(els.saveStatus, "Invio in corso...");
         await uploadItem(item);
         resetPhoto();
         setStatus(els.saveStatus, "Rilievo inviato correttamente.", "ok");
       } catch (err) {
         console.error(err);
-        enqueue(item);
+
+        if (processedPhoto && currentPosition) {
+          try {
+            const createdAt = new Date();
+            const safeCode = sanitizeCode(code);
+            const filename = makeFilenameFromDate(createdAt);
+            const photoPath = `${safeCode}/${filename}`;
+
+            enqueue({
+              local_id: makeLocalId(),
+              code,
+              lat: currentPosition.lat,
+              lon: currentPosition.lon,
+              accuracy: currentPosition.accuracy,
+              gps_timestamp: currentPosition.timestamp,
+              created_local_at: createdAt.toISOString(),
+              filename,
+              photo_path: photoPath,
+              photo_data_url: processedPhoto.dataUrl
+            });
+          } catch (_) {}
+        }
+
         resetPhoto();
         setStatus(els.saveStatus, `Invio fallito, salvato in coda: ${err.message || err}`, "err");
+      } finally {
+        resetButtonBusy(els.saveBtn, "Invia rilievo");
       }
     }
 
     async function uploadItem(item) {
       if (!supabaseClient) throw new Error("Supabase non inizializzato");
 
-      const { data: createdId, error: createError } = await supabaseClient
-        .rpc("create_survey_point", {
-          p_code: item.code,
-          p_lat: item.lat,
-          p_lon: item.lon,
-          p_accuracy: item.accuracy,
-          p_gps_timestamp: item.gps_timestamp,
-          p_created_local_at: item.created_local_at
-        });
-
-      if (createError) throw createError;
-      if (!createdId) throw new Error("ID progressivo non restituito da Supabase");
-
-      const id = createdId;
-      const filename = `${id}.jpg`;
+      const filename = item.filename || makeFilenameFromDate(new Date(item.created_local_at || Date.now()));
+      const safeCode = sanitizeCode(item.code);
+      const photoPath = item.photo_path || `${safeCode}/${filename}`;
       const blob = dataUrlToBlob(item.photo_data_url);
+
+      setStatus(els.saveStatus, `Caricamento foto ${filename}...`);
 
       const { error: uploadError } = await supabaseClient.storage
         .from(STORAGE_BUCKET)
-        .upload(filename, blob, { contentType: "image/jpeg", upsert: false });
+        .upload(photoPath, blob, { contentType: "image/jpeg", upsert: true });
 
       if (uploadError) throw uploadError;
 
       const { data: publicData } = supabaseClient.storage
         .from(STORAGE_BUCKET)
-        .getPublicUrl(filename);
+        .getPublicUrl(photoPath);
 
-      const { error: finalizeError } = await supabaseClient
-        .rpc("finalize_survey_point", {
-          p_id: id,
-          p_filename: filename,
-          p_photo_path: filename,
-          p_photo_url: publicData.publicUrl
+      setStatus(els.saveStatus, "Salvataggio rilievo...");
+
+      const { error: insertError } = await supabaseClient
+        .from(TABLE_POINTS)
+        .insert({
+          code: item.code,
+          lat: item.lat,
+          lon: item.lon,
+          accuracy: item.accuracy,
+          gps_timestamp: item.gps_timestamp,
+          created_local_at: item.created_local_at,
+          filename: filename,
+          photo_path: photoPath,
+          photo_url: publicData.publicUrl,
+          sync_status: "synced"
         });
 
-      if (finalizeError) throw finalizeError;
+      if (insertError) throw insertError;
+    }
+
+    function sanitizeCode(code) {
+      return String(code || "SENZA_CODICE")
+        .trim()
+        .replace(/[^a-zA-Z0-9_-]/g, "_")
+        .replace(/_+/g, "_")
+        .replace(/^_+|_+$/g, "") || "SENZA_CODICE";
+    }
+
+    function makeFilenameFromDate(date) {
+      const d = date instanceof Date ? date : new Date(date);
+
+      const yyyy = String(d.getFullYear());
+      const mm = String(d.getMonth() + 1).padStart(2, "0");
+      const dd = String(d.getDate()).padStart(2, "0");
+      const hh = String(d.getHours()).padStart(2, "0");
+      const mi = String(d.getMinutes()).padStart(2, "0");
+      const ss = String(d.getSeconds()).padStart(2, "0");
+      const ms = String(d.getMilliseconds()).padStart(3, "0");
+
+      return `${yyyy}${mm}${dd}_${hh}${mi}${ss}_${ms}.jpg`;
+    }
+
+    function makeLocalId() {
+      if (window.crypto && typeof crypto.randomUUID === "function") return crypto.randomUUID();
+      return "local_" + Date.now() + "_" + Math.random().toString(36).slice(2);
     }
 
     function getQueue() {
@@ -543,17 +651,31 @@
 
     async function syncQueue() {
       if (!navigator.onLine) return setStatus(els.saveStatus, "Connessione assente.", "err");
+
       const queue = getQueue();
       if (queue.length === 0) return setStatus(els.saveStatus, "Nessun rilievo in coda.", "ok");
 
+      setButtonBusy(els.syncBtn, "Sincronizzazione...");
       setStatus(els.saveStatus, `Sincronizzazione di ${queue.length} rilievi...`);
+
       const remaining = [];
       for (const item of queue) {
-        try { await uploadItem(item); }
-        catch (err) { console.error(err); remaining.push(item); }
+        try {
+          await uploadItem(item);
+        } catch (err) {
+          console.error(err);
+          remaining.push(item);
+        }
       }
+
       setQueue(remaining);
-      setStatus(els.saveStatus, remaining.length ? `${remaining.length} rilievi ancora in coda.` : "Coda sincronizzata.", remaining.length ? "err" : "ok");
+      setStatus(
+        els.saveStatus,
+        remaining.length ? `${remaining.length} rilievi ancora in coda.` : "Coda sincronizzata.",
+        remaining.length ? "err" : "ok"
+      );
+
+      resetButtonBusy(els.syncBtn, "Sincronizza coda");
     }
 
     function clearQueue() {
