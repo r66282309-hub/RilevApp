@@ -9,12 +9,6 @@
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 
-  <link rel="manifest" href="./manifest.json" />
-  <meta name="theme-color" content="#1f6f43" />
-  <meta name="apple-mobile-web-app-capable" content="yes" />
-  <meta name="apple-mobile-web-app-title" content="RilevApp" />
-  <meta name="apple-mobile-web-app-status-bar-style" content="default" />
-
   <style>
     * {
       box-sizing: border-box;
@@ -270,10 +264,24 @@
       attribution: "© OpenStreetMap"
     });
 
-    L.control.layers({
-      "Satellite": satellite,
-      "OpenStreetMap": osm
-    }).addTo(map);
+    const catasto = L.tileLayer.wms("https://wms.cartografia.agenziaentrate.gov.it/inspire/wms/ows01.php", {
+      layers: "CP.CadastralParcel",
+      format: "image/png",
+      transparent: true,
+      version: "1.1.1",
+      maxZoom: 22,
+      attribution: "Catasto © Agenzia delle Entrate"
+    });
+
+    L.control.layers(
+      {
+        "Satellite": satellite,
+        "OpenStreetMap": osm
+      },
+      {
+        "Catasto - particelle": catasto
+      }
+    ).addTo(map);
 
     const pointsLayer = L.layerGroup().addTo(map);
     let allPoints = [];
@@ -501,15 +509,6 @@
         .replaceAll(">", "&gt;")
         .replaceAll('"', "&quot;")
         .replaceAll("'", "&#039;");
-    }
-  </script>
-  <script>
-    if ("serviceWorker" in navigator) {
-      window.addEventListener("load", () => {
-        navigator.serviceWorker.register("./service-worker.js")
-          .then(() => console.log("RilevApp service worker registrato"))
-          .catch(err => console.error("Errore service worker:", err));
-      });
     }
   </script>
 </body>
