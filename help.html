@@ -1,0 +1,188 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>RilevApp - Help</title>
+
+  <link rel="manifest" href="./manifest.json" />
+  <meta name="theme-color" content="#1f6f43" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-title" content="RilevApp" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+
+  <style>
+    :root {
+      --primary: #1f6f43;
+      --dark: #14532d;
+      --bg: #f4f7f5;
+      --card: #ffffff;
+      --text: #1f2937;
+      --muted: #667085;
+      --border: #d0d5dd;
+      --info: #344054;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background: var(--bg);
+      color: var(--text);
+    }
+
+    header {
+      background: var(--primary);
+      color: white;
+      text-align: center;
+      padding: 18px 14px;
+    }
+
+    header h1 {
+      margin: 0;
+      font-size: 1.55rem;
+    }
+
+    header p {
+      margin: 4px 0 0;
+      font-size: 0.95rem;
+      opacity: 0.9;
+    }
+
+    main {
+      max-width: 680px;
+      margin: 0 auto;
+      padding: 14px;
+    }
+
+    .card {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 18px;
+      padding: 16px;
+      margin-bottom: 14px;
+      box-shadow: 0 5px 16px rgba(16, 24, 40, 0.06);
+    }
+
+    h2 {
+      margin: 0 0 10px;
+      font-size: 1.15rem;
+      color: var(--dark);
+    }
+
+    p {
+      margin: 8px 0;
+      line-height: 1.45;
+    }
+
+    ol, ul {
+      margin: 8px 0 0;
+      padding-left: 22px;
+      line-height: 1.5;
+    }
+
+    li {
+      margin-bottom: 7px;
+    }
+
+    .note {
+      background: #f2f4f7;
+      border-radius: 13px;
+      padding: 11px 12px;
+      color: var(--info);
+      font-size: 0.95rem;
+    }
+
+    .ok {
+      background: #ecfdf3;
+      color: #027a48;
+    }
+
+    .warning {
+      background: #fff7ed;
+      color: #9a3412;
+    }
+
+    a.button {
+      display: block;
+      text-align: center;
+      text-decoration: none;
+      background: var(--primary);
+      color: white;
+      border-radius: 14px;
+      padding: 14px 16px;
+      font-size: 1.05rem;
+      font-weight: 800;
+      margin-top: 10px;
+    }
+
+    a.button.secondary {
+      background: #344054;
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>RilevApp</h1>
+    <p>Guida rapida al survey</p>
+  </header>
+
+  <main>
+    <section class="card">
+      <h2>Permessi</h2>
+      <p>Se il telefono li richiede, concedi i permessi per:</p>
+      <ul>
+        <li><strong>posizione</strong>, per acquisire le coordinate GPS;</li>
+        <li><strong>fotocamera</strong>, per scattare o selezionare la foto.</li>
+      </ul>
+    </section>
+
+    <section class="card">
+      <h2>Codice identificativo</h2>
+      <p>Nel campo <strong>Codice identificativo</strong> inserisci la tua <strong>Partita IVA</strong>, poi premi <strong>Valida codice</strong>.</p>
+      <div class="note">I messaggi sotto i pulsanti indicano lo stato dell’operazione: codice valido, GPS acquisito, foto pronta, invio completato o rilievo in coda.</div>
+    </section>
+
+    <section class="card">
+      <h2>Posizione GPS</h2>
+      <p>La posizione viene acquisita automaticamente alla prima apertura del survey.</p>
+      <p>Se ti sposti, premi <strong>Aggiorna GPS</strong> prima di inviare il rilievo.</p>
+      <div class="note ok">L’indicatore di accuratezza mostra la precisione stimata della posizione, espressa in metri.</div>
+    </section>
+
+    <section class="card">
+      <h2>Invio del rilievo</h2>
+      <ol>
+        <li>Inserisci la Partita IVA e premi <strong>Valida codice</strong>.</li>
+        <li>Controlla che il GPS sia acquisito.</li>
+        <li>Premi <strong>Scatta / scegli foto</strong>.</li>
+        <li>Premi <strong>Invia rilievo</strong>.</li>
+      </ol>
+    </section>
+
+    <section class="card">
+      <h2>Assenza di rete</h2>
+      <p>Se non c’è connessione, le segnalazioni vengono salvate nella <strong>coda locale</strong>.</p>
+      <p>Quando torna la rete, premi <strong>Sincronizza coda</strong> per inviarle.</p>
+      <div class="note warning">Non svuotare la coda locale se contiene rilievi non ancora inviati.</div>
+    </section>
+
+    <section class="card">
+      <a class="button" href="survey.html">Apri Survey</a>
+      <a class="button secondary" href="index.html">Torna alla home</a>
+    </section>
+  </main>
+  <script>
+    if ("serviceWorker" in navigator) {
+      window.addEventListener("load", () => {
+        navigator.serviceWorker.register("./service-worker.js")
+          .then(() => console.log("RilevApp service worker registrato"))
+          .catch(err => console.error("Errore service worker:", err));
+      });
+    }
+  </script>
+</body>
+</html>
