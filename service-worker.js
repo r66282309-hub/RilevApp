@@ -1,8 +1,6 @@
-const CACHE_NAME = "rilevapp-cache-v2";
+const CACHE_NAME = "rilevapp-cache-v3";
 
 const APP_SHELL = [
-  "./",
-  "./index.html",
   "./survey.html",
   "./help.html",
   "./manifest.json",
@@ -13,6 +11,7 @@ const APP_SHELL = [
 ];
 
 const NEVER_CACHE_PATTERNS = [
+  "index.html",
   "map.html",
   "supabase.co",
   "survey-photos",
@@ -85,7 +84,7 @@ self.addEventListener("fetch", event => {
         })
         .catch(() => {
           if (event.request.mode === "navigate") {
-            return caches.match("./index.html");
+            return caches.match("./survey.html");
           }
 
           return new Response("", {
