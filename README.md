@@ -4,15 +4,16 @@
 
 ## Funzioni
 
-* Validazione codice tramite Supabase.
-* Acquisizione coordinate GPS.
-* Invio di una foto JPG ridimensionata.
-* Scrittura coordinate GPS negli EXIF.
-* Salvataggio dati su Supabase.
-* Coda locale offline.
-* Mappa riservata con login.
-* Popup con anteprima e download foto.
-* Filtro punti per codice identificativo.
+- Validazione codice tramite Supabase.
+- Acquisizione coordinate GPS.
+- Invio di una foto JPG ridimensionata.
+- Scrittura coordinate GPS negli EXIF.
+- Salvataggio dati su Supabase.
+- Coda locale offline.
+- Mappa riservata con login.
+- Popup con anteprima e download foto.
+- Filtro punti per codice identificativo.
+- App Android sperimentale per accesso rapido al survey.
 
 ## Struttura
 
@@ -70,6 +71,7 @@ Tabelle principali:
 
 ## Note
 
-* La geolocalizzazione richiede HTTPS e permesso dell’utente.
-* In caso di modifiche al codice, può essere necessario svuotare cache/PWA.
-* Su iPhone/Safari può essere necessario cancellare i dati del sito se viene caricata una vecchia versione.
+- La geolocalizzazione richiede HTTPS e permesso dell’utente.
+- In caso di modifiche al codice, può essere necessario svuotare cache/PWA.
+- Su iPhone/Safari può essere necessario cancellare i dati del sito se viene caricata una vecchia versione.
+- È disponibile una versione Android sperimentale dell’app, pensata come collegamento rapido al survey. Può essere soggetta a limitazioni o avvisi di sicurezza del sistema Android.
